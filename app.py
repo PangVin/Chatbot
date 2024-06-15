@@ -1,4 +1,5 @@
 import streamlit as st
+import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
