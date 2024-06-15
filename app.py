@@ -4,13 +4,14 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import json
 import nltk
-nltk.download('punkt')
-nltk.download("stopwords")
+nltk.download('punkt', force=True)
+nltk.download('stopwords', force=True)
 import re
 import random
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from googletrans import Translator, LANGUAGES
 
 # Load intents file
 with open('intents.json') as file:
@@ -30,6 +31,7 @@ def clean_text(text):
     text = text.lower()
     text = re.sub(r'[^a-z\s]', '', text)
     tokens = word_tokenize(text)
+    text = re.sub(r'\s+', ' ', text).strip()
     stop_words = set(stopwords.words('english'))
     tokens = [word for word in tokens if word not in stop_words]
     stemmer = PorterStemmer()
@@ -50,8 +52,40 @@ y = encoder.fit_transform(labels)
 rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
 rf_classifier.fit(X, y)
 
-# Function to predict response
+def translate_to_english(text):
+    translator = Translator()
+    translation = translator.translate(text, src='id', dest='en')
+    return translation.text
+
+def translate_to_indonesian(text):
+    translator = Translator()
+    translation = translator.translate(text, src='en', dest='id')
+    return translation.text
+
+def detect_language(text):
+    translator = Translator()
+    try:
+        detected = translator.detect(text)
+        if detected and hasattr(detected, 'lang'):
+            return detected.lang
+        else:
+            st.warning("Failed to detect language. Defaulting to English.")
+            return 'en'  # Default to English
+    except AttributeError as e:
+        st.warning(f"Error detecting language: AttributeError - {e}")
+        return 'en'  # Default to English in case of AttributeError
+    except Exception as e:
+        st.warning(f"Error detecting language: {type(e).__name__} - {e}")
+        return 'en'  # Default to English for any other exception
+
+
 def get_bot_response(user_input):
+        # Detect user input language
+    input_lang = detect_language(user_input)
+
+    if input_lang == "id":
+        user_input = translate_to_english(user_input)
+
     cleaned_input = clean_text(user_input)
     input_vector = vectorizer.transform([cleaned_input])
     predicted_label = rf_classifier.predict(input_vector)[0]
@@ -64,19 +98,40 @@ def get_bot_response(user_input):
 
     # Choose a random response from the list of responses
     bot_response = random.choice(responses)
-    return bot_response
+
+
+    # Translate responses if necessary
+    if input_lang == 'en':
+        translated_response = bot_response
+    elif input_lang == 'id':
+        translated_response = translate_to_indonesian(bot_response)
+    else:
+        translated_response = bot_response  # fallback to original response
+
+    return translated_response
 
 # Streamlit App
-def main():
-    st.title('Simple Chatbot with Streamlit')
+st.title("Chatbot Mental Health")
 
-    # User input box
-    user_input = st.text_input('Enter your message:')
-    if st.button('Send'):
-        if user_input:
-            bot_response = get_bot_response(user_input)
-            st.text('Bot response:')
-            st.text(bot_response)
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-if __name__ == '__main__':
-    main()
+# Display chat messages from history on app rerun
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Accept user input
+if prompt := st.chat_input("What is up?"):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    # Display user message in chat message container
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Display assistant response in chat message container
+    with st.chat_message("assistant"):
+        response = st.write(get_bot_response(prompt))
+    # Add assistant response to chat history
+    st.session_state.messages.append({"role": "assistant", "content": response})
