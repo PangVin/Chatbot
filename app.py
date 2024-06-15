@@ -131,8 +131,11 @@ if prompt := st.chat_input("What is up?"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Display assistant response in chat message container
-    with st.chat_message("assistant"):
-        response = st.write(get_bot_response(prompt))
+    # Get assistant response
+    response = get_bot_response(prompt)
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
+    # Display assistant response in chat message container
+    with st.chat_message("assistant"):
+        st.markdown(response)
+
