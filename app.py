@@ -1,116 +1,76 @@
 import streamlit as st
-import sklearn
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
-import json
-import nltk
-nltk.download('punkt', force=True)
-nltk.download('stopwords', force=True)
+import numpy as np
+import pandas as pd
 import re
-import random
-from nltk.stem import PorterStemmer
-from nltk.tokenize import word_tokenize
+import nltk
 from nltk.corpus import stopwords
-from googletrans import Translator, LANGUAGES
+from nltk.tokenize import word_tokenize
+import json
+import random
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from sklearn.preprocessing import LabelEncoder
+import tensorflow as tf
+nltk.download('stopwords')
+nltk.download('punkt')
 
-# Load intents file
-with open('intents.json') as file:
-    intents = json.load(file)
 
-# Preprocess data as before
-patterns = []
-responses = []
-labels = []
-for intent in intents['intents']:
-    for pattern in intent['patterns']:
-        patterns.append(pattern)
-        responses.append(intent['responses'])
-        labels.append(intent['tag'])
+# Load data and model
+with open('intents.json', 'r') as f:
+    data = json.load(f)
+
+df = pd.DataFrame(data['intents'])
+
+dic = {"tag":[], "patterns":[], "responses":[]}
+for i in range(len(df)):
+    ptrns = df[df.index == i]['patterns'].values[0]
+    rspns = df[df.index == i]['responses'].values[0]
+    tag = df[df.index == i]['tag'].values[0]
+    for j in range(len(ptrns)):
+        dic['tag'].append(tag)
+        dic['patterns'].append(ptrns[j])
+        dic['responses'].append(rspns)
+
+df = pd.DataFrame.from_dict(dic)
 
 def clean_text(text):
     text = text.lower()
     text = re.sub(r'[^a-z\s]', '', text)
     tokens = word_tokenize(text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    stop_words = set(stopwords.words('english'))
-    tokens = [word for word in tokens if word not in stop_words]
-    stemmer = PorterStemmer()
-    tokens = [stemmer.stem(word) for word in tokens]
+    tokens = [word for word in tokens if word not in stopwords.words('english')]
     return ' '.join(tokens)
 
-cleaned_patterns = [clean_text(pattern) for pattern in patterns]
+df['cleaned_patterns'] = df['patterns'].apply(clean_text)
 
-# TF-IDF vectorization
-vectorizer = TfidfVectorizer(tokenizer=word_tokenize)
-X = vectorizer.fit_transform(cleaned_patterns)
+tokenizer = Tokenizer(lower=True, split=' ')
+tokenizer.fit_on_texts(df['cleaned_patterns'])
 
-# Convert labels to numerical values
-encoder = LabelEncoder()
-y = encoder.fit_transform(labels)
+# Load the trained model
+model = tf.keras.models.load_model('model.h5')  # Ganti 'your_model_path' dengan path ke model Anda
 
-# Train Random Forest model
-rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
-rf_classifier.fit(X, y)
+# Function to predict tag
+def get_response_lstm(input_text):
+    # Cleaning text
+    input_clean = clean_text(input_text)
+    # Tokenize and pad input text
+    input_sequence = tokenizer.texts_to_sequences([input_clean])
+    input_padded = pad_sequences(input_sequence, maxlen=9, padding='post')
 
-def translate_to_english(text):
-    translator = Translator()
-    translation = translator.translate(text, src='id', dest='en')
-    return translation.text
+    # Predict using LSTM model
+    prediction = model.predict(input_padded)
+    predicted_index = np.argmax(prediction, axis=1)[0]
 
-def translate_to_indonesian(text):
-    translator = Translator()
-    translation = translator.translate(text, src='en', dest='id')
-    return translation.text
+    label_encoder = LabelEncoder()
+    label_encoder.fit(df['tag'])
+    # Get predicted intent label using the fitted LabelEncoder instance
+    intent_label = label_encoder.inverse_transform([predicted_index])[0]
 
-def detect_language(text):
-    translator = Translator()
-    try:
-        detected = translator.detect(text)
-        if detected and hasattr(detected, 'lang'):
-            return detected.lang
-        else:
-            st.warning("Failed to detect language. Defaulting to English.")
-            return 'en'  # Default to English
-    except AttributeError as e:
-        st.warning(f"Error detecting language: AttributeError - {e}")
-        return 'en'  # Default to English in case of AttributeError
-    except Exception as e:
-        st.warning(f"Error detecting language: {type(e).__name__} - {e}")
-        return 'en'  # Default to English for any other exception
+    # Choose a random response corresponding to the predicted intent label
+    response = random.choice([res for intent in data['intents'] if intent['tag'] == intent_label for res in intent['responses']])
 
+    return response
 
-def get_bot_response(user_input):
-        # Detect user input language
-    input_lang = detect_language(user_input)
-
-    if input_lang == "id":
-        user_input = translate_to_english(user_input)
-
-    cleaned_input = clean_text(user_input)
-    input_vector = vectorizer.transform([cleaned_input])
-    predicted_label = rf_classifier.predict(input_vector)[0]
-
-    # Get responses for the predicted intent tag
-    for intent in intents['intents']:
-        if intent['tag'] == encoder.inverse_transform([predicted_label])[0]:
-            responses = intent['responses']
-            break
-
-    # Choose a random response from the list of responses
-    bot_response = random.choice(responses)
-
-
-    # Translate responses if necessary
-    if input_lang == 'en':
-        translated_response = bot_response
-    elif input_lang == 'id':
-        translated_response = translate_to_indonesian(bot_response)
-    else:
-        translated_response = bot_response  # fallback to original response
-
-    return translated_response
-
+# Streamlit app
 # Streamlit App
 st.title("Chatbot Mental Health")
 
@@ -132,10 +92,9 @@ if prompt := st.chat_input("What is up?"):
         st.markdown(prompt)
 
     # Get assistant response
-    response = get_bot_response(prompt)
+    response = get_response_lstm(prompt)
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
         st.markdown(response)
-
