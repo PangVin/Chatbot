@@ -17,7 +17,7 @@ nltk.download('punkt')
 
 # Load data and model
 with open('intents.json', 'r') as f:
-    data = json.load(f)
+    data = json.load(f) 
 
 df = pd.DataFrame(data['intents'])
 
@@ -70,21 +70,98 @@ def get_response_lstm(input_text):
 
     return response
 
-# Streamlit app
-# Streamlit App
-st.title("Chatbot Mental Health")
+# Greeting and recommended questions
+greeting = "Hi! Welcome to the Mental Health Chatbot. How can I assist you today?"
+recommended_questions = [
+    "What should I do if I feel stressed?",
+    "How can I handle burnout at work?",
+    "Does taking short breaks help with productivity?",
+]
 
-# Initialize chat history
+# Daily mental health tips
+mental_health_tips = [
+    "Take a few minutes to breathe deeply and relax.",
+    "Try to step away from work for a short walk.",
+    "Write down something you're grateful for today.",
+    "Reach out to a friend or loved one for a chat.",
+    "Take a break and enjoy a cup of tea or coffee."
+]
+daily_tip = random.choice(mental_health_tips)
+
+st.title("Mental Health Chatbot")
+
+# Initialize chat history and mood tracking
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = [{"role": "assistant", "content": greeting}]
+    st.session_state.recommendations_shown = False  # Track if recommendations were shown
+if "mood_history" not in st.session_state:
+    st.session_state.mood_history = []
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Sidebar with the "New Chat" button at the top
+with st.sidebar:
+    st.button("New Chat", on_click=lambda: st.session_state.messages.clear())  # Clear messages on new chat
+
+    st.header("Your Mental Health Tools")
+
+    # Daily Mental Health Tips
+    st.subheader("Daily Mental Health Tip")
+    st.info(daily_tip)
+
+    # Mood Tracking
+    with st.expander("Mood Tracking"):
+        mood = st.radio("How are you feeling today?", ("Happy", "Sad", "Anxious", "Stressed", "Neutral"))
+        if st.button("Submit Mood", key="mood_button"):
+            st.session_state.mood_history.append(mood)
+            st.success("Mood recorded! Thank you for sharing.")
+
+    # Anonymous Feedback Collection
+    with st.expander("We value your feedback"):
+        feedback = st.text_area("Please share any feedback or suggestions you have (optional):")
+        if st.button("Submit Feedback", key="feedback_button"):
+            st.session_state.feedback = feedback
+            st.success("Thank you for your feedback!")
+
+    # Download Chat Transcript
+    with st.expander("Download Chat Transcript"):
+        transcript = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages])
+        st.download_button(
+            label="Download Transcript",
+            data=transcript,
+            file_name="chat_transcript.txt",
+            mime="text/plain"
+        )
+
+    # Chat History
+    st.subheader("Chat History")
+    for idx, chat in enumerate(st.session_state.chat_history):
+        if st.button(f"Chat {idx + 1}"):
+            st.session_state.messages = chat["messages"]
+            st.experimental_rerun()  # Rerun the app to load selected chat
 
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# Display recommended questions if not shown yet
+if not st.session_state.recommendations_shown:
+    st.markdown("### Recommended Questions:")
+    for question in recommended_questions:
+        if st.button(question):
+            st.session_state.messages.append({"role": "user", "content": question})
+            with st.chat_message("user"):
+                st.markdown(question)
+            response = get_response_lstm(question)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            with st.chat_message("assistant"):
+                st.markdown(response)
+            st.session_state.recommendations_shown = True  # Hide recommendations after one is selected
+            st.experimental_rerun()  # Rerun the app to update UI
+
 # Accept user input
-if prompt := st.chat_input("What is up?"):
+if prompt := st.chat_input("What's on your mind?"):
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     # Display user message in chat message container
