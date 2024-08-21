@@ -70,6 +70,9 @@ def get_response_lstm(input_text):
 
     return response
 
+import streamlit as st
+import random
+
 # Greeting and recommended questions
 greeting = "Hi! Welcome to the Mental Health Chatbot. How can I assist you today?"
 recommended_questions = [
@@ -99,9 +102,19 @@ if "mood_history" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Sidebar with the "New Chat" button at the top
+# Sidebar with daily mental health tips at the top
 with st.sidebar:
-    st.button("New Chat", on_click=lambda: st.session_state.messages.clear())  # Clear messages on new chat
+ # New Chat Button
+    if st.button("New Chat"):
+        st.session_state.messages = []
+        st.session_state.recommendations_shown = False
+        st.session_state.chat_history.append({
+            "date": st.session_state.messages,
+            "messages": st.session_state.messages.copy()
+        })
+        st.session_state.messages = [{"role": "assistant", "content": greeting}]
+        st.experimental_rerun()  # Rerun the app to reset chat
+
 
     st.header("Your Mental Health Tools")
 
@@ -132,6 +145,7 @@ with st.sidebar:
             file_name="chat_transcript.txt",
             mime="text/plain"
         )
+
 
     # Chat History
     st.subheader("Chat History")
