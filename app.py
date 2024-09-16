@@ -46,29 +46,54 @@ tokenizer = Tokenizer(lower=True, split=' ')
 tokenizer.fit_on_texts(df['cleaned_patterns'])
 
 # Load the trained model
-model = tf.keras.models.load_model('model.h5')  # Ganti 'your_model_path' dengan path ke model Anda
+model = tf.keras.models.load_model('model.h5') 
 
-# Function to predict tag
+# Function untuk memprediksi pakai model LSTM
 def get_response_lstm(input_text):
-    # Cleaning text
+    # Hapus Text dari function clean_text yang diatas
     input_clean = clean_text(input_text)
     # Tokenize and pad input text
+    # Mengubah teks yang telah dibersihkan menjadi urutan token menggunakan tokenizer yang telah dilatih
     input_sequence = tokenizer.texts_to_sequences([input_clean])
+    # Memastikan urutan token memiliki panjang tetap dengan menambahkan padding di akhir jika diperlukan
     input_padded = pad_sequences(input_sequence, maxlen=9, padding='post')
 
     # Predict using LSTM model
+    # Menggunakan model LSTM untuk memprediksi intent dari input yang telah diproses
     prediction = model.predict(input_padded)
+    # Menentukan indeks label intent dengan probabilitas tertinggi dari hasil prediksi model LSTM
     predicted_index = np.argmax(prediction, axis=1)[0]
-
+    # Membuat instance LabelEncoder baru dan melatihnya dengan label intent dari dataframe df
     label_encoder = LabelEncoder()
     label_encoder.fit(df['tag'])
     # Get predicted intent label using the fitted LabelEncoder instance
+    # Mengubah indeks label intent yang diprediksi kembali menjadi label intent yang dapat dibaca
     intent_label = label_encoder.inverse_transform([predicted_index])[0]
 
     # Choose a random response corresponding to the predicted intent label
+    # Memilih respons secara acak dari daftar respons yang sesuai dengan label intent yang diprediksi
     response = random.choice([res for intent in data['intents'] if intent['tag'] == intent_label for res in intent['responses']])
-
     return response
+
+# Function untuk rule based method
+def rule_based_response(prompt):
+    responses = {
+        "hello": "Hi there! How can I help you today?",
+        "bye": "Goodbye! Have a great day!",
+        "how are you": "I'm just a bot, but I'm doing well. How can I assist you?",
+        "thank you": "You're welcome! If you have any more questions, feel free to ask.",
+        "feeling sad": "I'm sorry to hear that you're feeling this way. Sometimes talking about it can help. Would you like to chat more about it?",
+        "stressed": "Stress can be overwhelming. It's important to take breaks and find ways to relax. Would you like some tips on managing stress?",
+        "happy": "That's great to hear! If you'd like to share more about what's making you happy, I'm here to listen.",
+        "lonely": "Feeling lonely can be tough. Remember, reaching out to friends or loved ones can make a difference. If you need to talk, I'm here for you.",
+        "help": "I'm here to help. If you're struggling, please consider talking to a mental health professional or someone you trust.",
+        "can you help me?": "I'm here to help. If you're struggling, please consider talking to a mental health professional or someone you trust." 
+    }
+    # Menyederhanakan prompt untuk mencocokkan dengan aturan
+    prompt = prompt.lower().strip()
+    return responses.get(prompt, None)  # Kembalikan None jika tidak ada respons yang cocok
+
+
 
 import streamlit as st
 import random
@@ -87,22 +112,25 @@ mental_health_tips = [
     "Try to step away from work for a short walk.",
     "Write down something you're grateful for today.",
     "Reach out to a friend or loved one for a chat.",
-    "Take a break and enjoy a cup of tea or coffee."
+    "Take a break and enjoy a cup of tea or coffee.",
+    "Practice mindfulness or meditation for a few minutes.",
+    "Listen to your favorite music to boost your mood.",
+    "Spend time in nature or simply sit in a quiet space.",
+    "Do something creative like drawing, writing, or crafting.",
+    "Limit your screen time and focus on offline activities."
 ]
+
 daily_tip = random.choice(mental_health_tips)
 
 st.title("Mental Health Chatbot")
 
-# Initialize chat history and mood tracking
+# Initialize chat history 
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": greeting}]
-    st.session_state.recommendations_shown = False  # Track if recommendations were shown
-if "mood_history" not in st.session_state:
-    st.session_state.mood_history = []
+    st.session_state.recommendations_shown = False  
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Sidebar with daily mental health tips at the top
 with st.sidebar:
  # New Chat Button
     if st.button("New Chat"):
@@ -122,14 +150,8 @@ with st.sidebar:
     st.subheader("Daily Mental Health Tip")
     st.info(daily_tip)
 
-    # Mood Tracking
-    with st.expander("Mood Tracking"):
-        mood = st.radio("How are you feeling today?", ("Happy", "Sad", "Anxious", "Stressed", "Neutral"))
-        if st.button("Submit Mood", key="mood_button"):
-            st.session_state.mood_history.append(mood)
-            st.success("Mood recorded! Thank you for sharing.")
 
-    # Anonymous Feedback Collection
+    # Feedback
     with st.expander("We value your feedback"):
         feedback = st.text_area("Please share any feedback or suggestions you have (optional):")
         if st.button("Submit Feedback", key="feedback_button"):
@@ -145,7 +167,6 @@ with st.sidebar:
             file_name="chat_transcript.txt",
             mime="text/plain"
         )
-
 
     # Chat History
     st.subheader("Chat History")
@@ -182,10 +203,16 @@ if prompt := st.chat_input("What's on your mind?"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Get assistant response
-    response = get_response_lstm(prompt)
+    # Cek apakah respons bisa didapat dari metode rule-based
+    response = rule_based_response(prompt)  
+    
+    if response is None:
+        # Jika tidak ada respons dari rule-based, gunakan model LSTM
+        response = get_response_lstm(prompt)
+    
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
         st.markdown(response)
+
