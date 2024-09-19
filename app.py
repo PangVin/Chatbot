@@ -52,27 +52,34 @@ model = tf.keras.models.load_model('model.h5')
 def get_response_lstm(input_text):
     # Hapus Text dari function clean_text yang diatas
     input_clean = clean_text(input_text)
+    print(f"Cleaned input: {input_clean}")
     # Tokenize and pad input text
     # Mengubah teks yang telah dibersihkan menjadi urutan token menggunakan tokenizer yang telah dilatih
     input_sequence = tokenizer.texts_to_sequences([input_clean])
+    print(f"Tokenized input: {input_sequence}")
     # Memastikan urutan token memiliki panjang tetap dengan menambahkan padding di akhir jika diperlukan
     input_padded = pad_sequences(input_sequence, maxlen=9, padding='post')
+    print(f"Padded input: {input_padded}")
 
     # Predict using LSTM model
     # Menggunakan model LSTM untuk memprediksi intent dari input yang telah diproses
     prediction = model.predict(input_padded)
+    print(f"Model prediction: {prediction}")
     # Menentukan indeks label intent dengan probabilitas tertinggi dari hasil prediksi model LSTM
     predicted_index = np.argmax(prediction, axis=1)[0]
+    print(f"Predicted index: {predicted_index}")
     # Membuat instance LabelEncoder baru dan melatihnya dengan label intent dari dataframe df
     label_encoder = LabelEncoder()
     label_encoder.fit(df['tag'])
     # Get predicted intent label using the fitted LabelEncoder instance
     # Mengubah indeks label intent yang diprediksi kembali menjadi label intent yang dapat dibaca
     intent_label = label_encoder.inverse_transform([predicted_index])[0]
+    print(f"Intent label: {intent_label}")
 
     # Choose a random response corresponding to the predicted intent label
-    # Memilih respons secara acak dari daftar respons yang sesuai dengan label intent yang diprediksi
+    # Memilih respons secara acak dari daftar respons yang sesuai dengan label intent ya ng diprediksi
     response = random.choice([res for intent in data['intents'] if intent['tag'] == intent_label for res in intent['responses']])
+    print(f"Chosen response: {response}")
     return response
 
 # Function untuk rule based method
@@ -124,7 +131,7 @@ daily_tip = random.choice(mental_health_tips)
 
 st.title("Mental Health Chatbot")
 
-# Initialize chat history 
+# Ini untuk chat history
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": greeting}]
     st.session_state.recommendations_shown = False  
