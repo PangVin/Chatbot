@@ -13,6 +13,7 @@ from sklearn.preprocessing import LabelEncoder
 import tensorflow as tf
 nltk.download('stopwords')
 nltk.download('punkt')
+nltk.download('punkt_tab')
 
 
 # Load data and model
